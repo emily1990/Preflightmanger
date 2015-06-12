@@ -1,0 +1,66 @@
+create or replace FUNCTION RECOMMEND_JOB_TO_COMPARE(dteId IN NUMBER, app_id in NUMBER, session_id in NUMBER)
+RETURN CLOB
+IS
+        
+        summaryReport CLOB:=NULL;
+        selectstatement varchar2(32767);
+        wherestatement varchar2(32767);
+        querystatement varchar2(32767);
+        jobaliasstatement varchar2(32767);
+        JOB_ALIAS varchar2(1000);
+        suc NUMBER(5);
+        dif NUMBER(5);
+       rerun_id NUMBER(5);            
+        submitter varchar2(50);
+        message varchar2(100);
+        currentpillartype varchar2(100);
+        torecommendpillartype varchar2(100);
+        currentjobalias varchar2(100);
+        torecommendjobalias varchar2(100);
+        dteidid NUMBER(10);
+        CURSOR dteIdCursor IS
+            SELECT JOBREQID
+            FROM DTE30.DTE_MATS_HISTORY@dte_db_link.us.oracle.com
+            WHERE ADELABEL = (select base_label from oats_report.dte_job where dte_id = dteId);
+BEGIN
+summaryReport:='<table border="1" cellpadding=3px style="border-collapse:collapse;" width="100%">';
+
+select pillar_type into currentpillartype from oats_report.dte_job where dte_id = dteId;
+select job_alias into currentjobalias from oats_report.dte_job where dte_id = dteId;
+OPEN dteIdCursor;
+LOOP
+    FETCH dteIdCursor INTO dteidid;
+    EXIT WHEN dteIdCursor%NOTFOUND;
+    if dteidid = dteId then
+    continue;
+    end if;
+      select pillar_type into torecommendpillartype from oats_report.dte_job where dte_id = dteidid;
+        select job_alias into torecommendjobalias from oats_report.dte_job where dte_id = dteidid;
+if ((currentpillartype = torecommendpillartype) and (lower(currentjobalias) like '%starter%' and lower(torecommendjobalias) like '%starter%')) or
+    ((currentpillartype = torecommendpillartype) and (lower(currentjobalias) not like '%starter%' and lower(torecommendjobalias) not like '%starter%'))
+       then
+             select suc, dif, rerun_id INTO suc, dif, rerun_id
+             from oats_report.dte_job_stats dte_job_stats
+            where DTE_ID = dteidid;
+            select JOB_ALIAS, submitter INTO JOB_ALIAS, submitter from oats_report.dte_job dte_job
+            where DTE_ID=dteidid;
+             dbms_lob.append(summaryReport,'  <tr>');
+        
+        dbms_lob.append(summaryReport,'    <td><b>'||JOB_ALIAS||'</b></td>');
+        dbms_lob.append(summaryReport,'    <td><a href="f?p='||app_id||':14:'||session_id||'::NO::P14_DTE_ID,P14_RERUN_ID,P14_THUMB_DTE_ID:'||dteidid||','||rerun_id||'">'||dteidid||'</a></td>');
+        dbms_lob.append(summaryReport,'    <td>'||submitter||'</td>');
+        dbms_lob.append(summaryReport,'    <td><font color=green><b>'||suc||'</b></font></td>');
+        dbms_lob.append(summaryReport,'    <td><font color=red><b>'||dif||'</b></font></td>');
+dbms_lob.append(summaryReport,'    <td><font color=green><b><a href="#" onClick="compareFarmJobsAccoringToCategorywithpara('||dteidid||')"><u>compare</u></a></b></font></td>');        
+dbms_lob.append(summaryReport,'  </tr>');
+        end if;
+
+end loop;
+CLOSE dteIdCursor;
+ dbms_lob.append(summaryReport,'</table>');
+if summaryReport='<table border="1" cellpadding=3px style="border-collapse:collapse;" width="100%"></table>' then
+    summaryReport :='No official mats for this base label';
+end if;
+     RETURN summaryReport;        
+  
+END;​
